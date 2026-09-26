@@ -1,15 +1,15 @@
+import 'package:konush/l10n/locale_cubit.dart';
+import 'package:konush/l10n/source_messages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:konush/src/core/di/injection.dart';
-import 'package:konush/src/features/listings/domain/listing.dart';
 import 'package:konush/src/features/listings/domain/listing_filter.dart';
 import 'package:konush/src/features/listings/presentation/cubit/listings_cubit.dart';
 import 'package:konush/src/features/listings/presentation/pages/listings_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
-
   @override
   Widget build(BuildContext context) => BlocProvider(
     create: (_) => sl<ListingsCubit>()..load(const ListingFilter(perPage: 8)),
@@ -17,614 +17,388 @@ class HomePage extends StatelessWidget {
   );
 }
 
-class _HomeView extends StatefulWidget {
+class _HomeView extends StatelessWidget {
   const _HomeView();
   @override
-  State<_HomeView> createState() => _HomeViewState();
-}
-
-class _HomeViewState extends State<_HomeView> {
-  DealType _deal = DealType.sale;
-  bool _newBuilds = false;
-  bool _menuOpen = false;
-  final _query = TextEditingController();
-
-  @override
-  void dispose() {
-    _query.dispose();
-    super.dispose();
-  }
-
-  void _openCatalog() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    context.go(
-      _newBuilds
-          ? '/listings?tab=new'
-          : _deal == DealType.rent
-          ? '/listings?tab=rent'
-          : '/listings',
-    );
-  }
-
-  void _toggleMenu() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _menuOpen = !_menuOpen);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mobile = MediaQuery.sizeOf(context).width < 700;
-    return PopScope(
-      canPop: !_menuOpen,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _menuOpen) setState(() => _menuOpen = false);
-      },
-      child: Scaffold(
-        appBar: CatalogHeader(onMenu: _toggleMenu, menuOpen: _menuOpen),
-        body: Column(
-          children: [
-            if (_menuOpen)
-              MobileHeaderMenu(
-                onClose: () => setState(() => _menuOpen = false),
-              ),
-            Expanded(
-              child: CustomScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Container(
-                      padding: EdgeInsets.fromLTRB(
-                        16,
-                        mobile ? 64 : 80,
-                        16,
-                        mobile ? 56 : 64,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Color(0xFFF2F7F4), Color(0xFFFBFAF7)],
-                        ),
-                      ),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 850),
-                          child: Column(
-                            children: [
-                              Text(
-                                'Вся недвижимость Кыргызстана. Один поиск.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: ink,
-                                  fontSize: mobile ? 36 : 52,
-                                  height: 1.08,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: mobile ? -1.08 : -1.56,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              const Text(
-                                'Объявления от агентств, застройщиков и собственников — обновляются ежечасно.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Color(0xFF5A6967),
-                                  fontSize: 15,
-                                  height: 1.5,
-                                ),
-                              ),
-                              SizedBox(height: mobile ? 32 : 36),
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(19),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Color(0x2412211F),
-                                      blurRadius: 28,
-                                      offset: Offset(0, 10),
-                                    ),
-                                  ],
-                                ),
-                                child: Column(
-                                  children: [
-                                    FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      alignment: Alignment.center,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          _HomeTab(
-                                            label: 'Купить',
-                                            selected:
-                                                !_newBuilds &&
-                                                _deal == DealType.sale,
-                                            onTap: () => setState(() {
-                                              _newBuilds = false;
-                                              _deal = DealType.sale;
-                                            }),
-                                          ),
-                                          _HomeTab(
-                                            label: 'Аренда',
-                                            selected:
-                                                !_newBuilds &&
-                                                _deal == DealType.rent,
-                                            onTap: () => setState(() {
-                                              _newBuilds = false;
-                                              _deal = DealType.rent;
-                                            }),
-                                          ),
-                                          _HomeTab(
-                                            label: 'Новостройки',
-                                            selected: _newBuilds,
-                                            onTap: () => setState(
-                                              () => _newBuilds = true,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: TextField(
-                                            controller: _query,
-                                            onSubmitted: (_) => _openCatalog(),
-                                            decoration: const InputDecoration(
-                                              hintText:
-                                                  'Например: 3-комн в Джале до \$90k',
-                                              border: InputBorder.none,
-                                              enabledBorder: InputBorder.none,
-                                              focusedBorder: InputBorder.none,
-                                              contentPadding:
-                                                  EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                  ),
-                                              hintStyle: TextStyle(
-                                                fontSize: 14,
-                                                color: muted,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        FilledButton(
-                                          onPressed: _openCatalog,
-                                          style: FilledButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 20,
-                                              vertical: 10,
-                                            ),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Найти',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                alignment: WrapAlignment.center,
-                                children: [
-                                  for (final label in [
-                                    'Бишкек · Джал',
-                                    'Золотой квадрат',
-                                    'Эркиндик',
-                                    'Восток-5',
-                                  ])
-                                    ActionChip(
-                                      label: Text(label),
-                                      onPressed: _openCatalog,
-                                      backgroundColor: Colors.white,
-                                      elevation: 3,
-                                      pressElevation: 1,
-                                      shadowColor: const Color(0x2612211F),
-                                      surfaceTintColor: Colors.white,
-                                      side: const BorderSide(color: border),
-                                      shape: const StadiumBorder(),
-                                      labelStyle: const TextStyle(
-                                        fontSize: 12.5,
-                                        color: Color(0xFF485654),
-                                      ),
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: canvas,
+    appBar: const KonushAppBar(
+      title: 'Konush',
+      brand: true,
+      actions: [LanguageButton()],
+    ),
+    body: RefreshIndicator(
+      onRefresh: () =>
+          context.read<ListingsCubit>().load(const ListingFilter(perPage: 8)),
+      child: ContentWidth(
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      context.tr("Дом начинается здесь"),
+                      style: TextStyle(
+                        fontSize: 25,
+                        height: 1.2,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -.7,
                       ),
                     ),
-                  ),
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 40, 16, 20),
-                    sliver: SliverToBoxAdapter(
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Свежее на Konush',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: ink,
-                              ),
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: _openCatalog,
-                            child: const Text('Все объявления →'),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 7),
+                    Text(
+                      context.tr("Недвижимость в Кыргызстане"),
+                      style: TextStyle(color: muted, fontSize: 13),
                     ),
-                  ),
-                  BlocBuilder<ListingsCubit, ListingsState>(
-                    builder: (context, state) => switch (state) {
-                      ListingsLoaded(:final items) => SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverLayoutBuilder(
-                          builder: (context, constraints) {
-                            final columns = constraints.crossAxisExtent >= 1000
-                                ? 4
-                                : constraints.crossAxisExtent >= 650
-                                ? 2
-                                : 1;
-                            return SliverGrid.builder(
-                              gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: columns,
-                                    mainAxisExtent: columns == 1 ? 240 : null,
-                                    childAspectRatio: columns == 1
-                                        ? 1.48
-                                        : 1.05,
-                                    crossAxisSpacing: 18,
-                                    mainAxisSpacing: 18,
-                                  ),
-                              itemCount: items.take(8).length,
-                              itemBuilder: (_, i) =>
-                                  ListingCard(item: items[i], photoHeight: 132),
-                            );
-                          },
-                        ),
-                      ),
-                      ListingsFailure() => SliverToBoxAdapter(
-                        child: Center(
-                          child: TextButton(
-                            onPressed: () =>
-                                context.read<ListingsCubit>().load(),
-                            child: const Text('Повторить загрузку'),
-                          ),
-                        ),
-                      ),
-                      _ => const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(50),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      ),
-                    },
-                  ),
-                  const SliverPadding(
-                    padding: EdgeInsets.fromLTRB(8, 34, 8, 48),
-                    sliver: SliverToBoxAdapter(child: _MarketPanel()),
-                  ),
-                  const SliverToBoxAdapter(child: KonushFooter()),
-                ],
+                    const SizedBox(height: 22),
+                    const _HomeCategories(),
+                    const SizedBox(height: 22),
+                    const _HomeShortcuts(),
+                  ],
+                ),
               ),
             ),
+            SliverToBoxAdapter(
+              child: SectionLabel(
+                context.tr("Свежие объявления"),
+                trailing: TextButton(
+                  onPressed: () => openPage(context, '/listings'),
+                  child: Text(
+                    context.tr("Все"),
+                    style: TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+            ),
+            BlocBuilder<ListingsCubit, ListingsState>(
+              builder: (context, state) {
+                if (state is ListingsLoading) {
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.all(48),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                  );
+                }
+                if (state is ListingsFailure) {
+                  return SliverToBoxAdapter(
+                    child: AppEmptyState(
+                      icon: Icons.cloud_off_outlined,
+                      title: context.tr("Объявления не загрузились"),
+                      message: context.errorText(state.message),
+                      action: OutlinedButton(
+                        onPressed: () => context.read<ListingsCubit>().load(
+                          const ListingFilter(perPage: 8),
+                        ),
+                        child: Text(context.tr("Повторить")),
+                      ),
+                    ),
+                  );
+                }
+                final items = (state as ListingsLoaded).items.take(8).toList();
+                if (items.isEmpty) {
+                  return SliverToBoxAdapter(
+                    child: AppEmptyState(
+                      icon: Icons.home_outlined,
+                      title: context.tr("Здесь появятся новые объекты"),
+                      message: context.tr(
+                        "Объявлений пока нет. Загляните позже.",
+                      ),
+                    ),
+                  );
+                }
+                return SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  sliver: SliverList.separated(
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (_, i) => ListingCard(item: items[i]),
+                  ),
+                );
+              },
+            ),
+            const SliverToBoxAdapter(child: KonushFooter()),
           ],
         ),
+      ),
+    ),
+  );
+}
+
+bool _needsWideTiles(BuildContext context) =>
+    MediaQuery.sizeOf(context).width < 380 &&
+    MediaQuery.textScalerOf(context).scale(14) > 17;
+
+class _HomeCategories extends StatelessWidget {
+  const _HomeCategories();
+  @override
+  Widget build(BuildContext context) {
+    final stacked = _needsWideTiles(context);
+    final buy = _CategoryTile(
+      title: context.tr("Купить"),
+      subtitle: context.tr("Своя история"),
+      icon: Icons.key_rounded,
+      onTap: () => openPage(context, '/listings'),
+    );
+    final rent = _CategoryTile(
+      title: context.tr("Арендовать"),
+      subtitle: context.tr("Своё пространство"),
+      icon: Icons.chair_rounded,
+      onTap: () => openPage(context, '/listings?tab=rent'),
+    );
+    final builds = _CategoryTile(
+      title: context.tr("Новостройки"),
+      subtitle: context.tr("Новые возможности"),
+      icon: Icons.apartment_rounded,
+      tall: !stacked,
+      onTap: () => openPage(context, '/listings?tab=new'),
+    );
+    if (stacked) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final tile in [buy, rent, builds])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: SizedBox(height: 84, child: tile),
+            ),
+        ],
+      );
+    }
+    return SizedBox(
+      height: 190,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: buy),
+                const SizedBox(height: 10),
+                Expanded(child: rent),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: builds),
+        ],
       ),
     );
   }
 }
 
-class _MarketPanel extends StatelessWidget {
-  const _MarketPanel();
-  static const values = [
-    ('Золотой квадрат', 1350),
-    ('Эркиндик', 1280),
-    ('Магистраль', 1050),
-    ('Джал', 980),
-    ('Асанбай', 890),
-    ('Восток-5', 760),
-  ];
-
+class _HomeShortcuts extends StatelessWidget {
+  const _HomeShortcuts();
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(18, 25, 18, 18),
-    decoration: BoxDecoration(
-      color: ink,
-      borderRadius: BorderRadius.circular(18),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Рынок Бишкека',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 21,
-            fontWeight: FontWeight.w900,
+  Widget build(BuildContext context) {
+    final tiles = <Widget>[
+      _Shortcut(
+        context.tr("Жилые\nкомплексы"),
+        Icons.apartment_outlined,
+        () => openPage(context, '/complexes'),
+      ),
+      _Shortcut(
+        context.tr("Избранное"),
+        Icons.favorite_border_rounded,
+        () => context.go('/favorites'),
+      ),
+      _Shortcut(
+        context.tr("Мои\nобъявления"),
+        Icons.home_work_outlined,
+        () => openPage(context, '/my-listings'),
+      ),
+      _Shortcut(
+        context.tr("Помощь"),
+        Icons.help_outline_rounded,
+        () => openPage(context, '/support'),
+      ),
+    ];
+    if (_needsWideTiles(context)) {
+      return Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: tiles.take(2).toList(),
           ),
-        ),
-        const SizedBox(height: 5),
-        const Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: Text(
-                'Средняя цена за м² по районам, продажа квартир',
-                style: TextStyle(
-                  color: Color(0x8CFFFFFF),
-                  fontSize: 11,
-                  height: 1.4,
-                ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: tiles.skip(2).toList(),
+          ),
+        ],
+      );
+    }
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: tiles);
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+    this.tall = false,
+  });
+  final String title, subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool tall;
+  @override
+  Widget build(BuildContext context) => Material(
+    color: tall ? tint : canvas,
+    borderRadius: BorderRadius.circular(14),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onTap,
+      child: Stack(
+        children: [
+          Positioned(
+            right: -18,
+            bottom: -22,
+            child: Container(
+              width: tall ? 150 : 85,
+              height: tall ? 150 : 85,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: teal.withValues(alpha: .055),
               ),
             ),
-            Text(
-              'демо-\nданные',
-              textAlign: TextAlign.right,
-              style: TextStyle(color: Color(0xFF7FB5AD), fontSize: 10),
+          ),
+          if (tall)
+            const Positioned(
+              right: 3,
+              bottom: 0,
+              width: 135,
+              height: 120,
+              child: CustomPaint(painter: _BuildingsPainter()),
+            )
+          else
+            Positioned(
+              right: 9,
+              bottom: 10,
+              child: Transform.rotate(
+                angle: -.14,
+                child: Icon(icon, size: 45, color: const Color(0xFF6EA99A)),
+              ),
             ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        for (final item in values)
           Padding(
-            padding: const EdgeInsets.only(bottom: 13),
-            child: Row(
+            padding: const EdgeInsets.all(13),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 10,
-                  child: Text(
-                    item.$1,
-                    style: const TextStyle(
-                      color: Color(0xB8FFFFFF),
-                      fontSize: 11,
-                    ),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                Expanded(
-                  flex: 6,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(99),
-                    child: SizedBox(
-                      height: 7,
-                      child: LayoutBuilder(
-                        builder: (_, constraints) => Stack(
-                          children: [
-                            const Positioned.fill(
-                              child: ColoredBox(color: Color(0xFF1F3834)),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: FractionallySizedBox(
-                                widthFactor: item.$2 / 1350,
-                                child: const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Color(0xFF249E91),
-                                        Color(0xFF56D1C0),
-                                      ],
-                                    ),
-                                  ),
-                                  child: SizedBox.expand(),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                const SizedBox(height: 4),
+                if (tall)
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: muted, fontSize: 10),
                   ),
-                ),
-                const SizedBox(width: 18),
-                Expanded(
-                  flex: 5,
-                  child: Text(
-                    '\$${_groupThousands(item.$2)}',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                      color: Color(0xFF4FD0BE),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
-      ],
+        ],
+      ),
     ),
   );
+}
 
-  static String _groupThousands(int value) => value.toString().replaceAllMapped(
-    RegExp(r'\B(?=(\d{3})+(?!\d))'),
-    (_) => ',',
+class _BuildingsPainter extends CustomPainter {
+  const _BuildingsPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint();
+    void block(double x, double y, double width, double height, Color color) {
+      p.color = color;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, width, height),
+          const Radius.circular(3),
+        ),
+        p,
+      );
+    }
+
+    block(11, 49, 41, 71, const Color(0xFFC6DCD2));
+    block(51, 11, 53, 109, const Color(0xFF8CB6A6));
+    block(104, 33, 26, 87, const Color(0xFF5E9682));
+    for (var row = 0; row < 5; row++) {
+      for (var col = 0; col < 3; col++) {
+        block(59 + col * 14.0, 24 + row * 17.0, 7, 9, const Color(0xFFF2F8F2));
+      }
+    }
+    for (var row = 0; row < 3; row++) {
+      for (var col = 0; col < 2; col++) {
+        block(19 + col * 15.0, 61 + row * 17.0, 7, 9, const Color(0xFFF5F9F4));
+      }
+    }
+    block(67, 103, 18, 17, const Color(0xFF437C6B));
+    p.color = const Color(0xFF397864);
+    canvas.drawCircle(const Offset(26, 108), 12, p);
+    p.color = const Color(0xFF669D7F);
+    canvas.drawCircle(const Offset(15, 113), 9, p);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _Shortcut extends StatelessWidget {
+  const _Shortcut(this.label, this.icon, this.onTap);
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: canvas,
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(icon, color: teal, size: 23),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10, height: 1.35, color: ink),
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }
 
 class KonushFooter extends StatelessWidget {
   const KonushFooter({super.key});
   @override
-  Widget build(BuildContext context) => Container(
-    color: const Color(0xFF0C2420),
-    padding: const EdgeInsets.fromLTRB(16, 40, 16, 26),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Row(
-          children: [
-            DecoratedBox(
-              decoration: BoxDecoration(
-                color: teal,
-                borderRadius: BorderRadius.all(Radius.circular(7)),
-              ),
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: Center(
-                  child: Text(
-                    'K',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            SizedBox(width: 9),
-            Text(
-              'konush',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 15),
-        const Text(
-          'Агрегатор недвижимости Кыргызстана. Конуш\n— место, где ставят юрту; место, с которого\nначинается дом.',
-          style: TextStyle(
-            color: Color(0xFF86AAA4),
-            height: 1.55,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 27),
-        const Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _FooterGroup(
-                title: 'ПОКУПАТЕЛЯМ',
-                links: [
-                  'Купить квартиру',
-                  'Снять квартиру',
-                  'Дома и дачи',
-                  'Коммерческая',
-                  'Ипотечный калькулятор',
-                ],
-              ),
-            ),
-            Expanded(
-              child: _FooterGroup(
-                title: 'НОВОСТРОЙКИ',
-                links: ['Жилые комплексы', 'От застройщика'],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const _FooterGroup(
-          title: 'KONUSH',
-          links: ['Избранное', 'Разместить объявление', 'Войти'],
-        ),
-        const SizedBox(height: 34),
-        const Divider(color: Color(0xFF18342F)),
-        const SizedBox(height: 12),
-        const Row(
-          children: [
-            Expanded(
-              child: Text(
-                '© 2026 Konush',
-                style: TextStyle(color: Color(0xFF557C75), fontSize: 10),
-              ),
-            ),
-            Text(
-              'Кыргызстан',
-              style: TextStyle(color: Color(0xFF557C75), fontSize: 10),
-            ),
-          ],
-        ),
-      ],
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+    child: Text(
+      context.tr("Konush · Недвижимость Кыргызстана"),
+      textAlign: TextAlign.center,
+      style: TextStyle(color: muted, fontSize: 11),
     ),
   );
-}
-
-class _FooterGroup extends StatelessWidget {
-  const _FooterGroup({required this.title, required this.links});
-  final String title;
-  final List<String> links;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        title,
-        style: const TextStyle(
-          color: Color(0xFF53756F),
-          fontWeight: FontWeight.w800,
-          fontSize: 10,
-        ),
-      ),
-      const SizedBox(height: 10),
-      for (final link in links)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Text(
-            link,
-            style: const TextStyle(color: Color(0xFFA1BCB7), fontSize: 12),
-          ),
-        ),
-    ],
-  );
-}
-
-class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.label, this.selected = false, this.onTap});
-  final String label;
-  final bool selected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final tab = InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(99),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOutCubic,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? tint : Colors.transparent,
-          borderRadius: BorderRadius.circular(99),
-        ),
-        child: AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: selected ? teal : const Color(0xFF465552),
-          ),
-          child: Text(label, maxLines: 1),
-        ),
-      ),
-    );
-    return tab;
-  }
 }

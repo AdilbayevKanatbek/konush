@@ -44,13 +44,16 @@ class AuthFlowCubit extends Cubit<AuthFlowState> {
   });
 
   Future<bool> verifyResetCode(String phone, String code) async {
-    emit(const AuthFlowState(status: AuthFlowStatus.loading));
+    if (isClosed || state.status == AuthFlowStatus.loading) return false;
+    _safeEmit(const AuthFlowState(status: AuthFlowStatus.loading));
     try {
       final token = await _repository.verifyResetCode(phone: phone, code: code);
-      emit(AuthFlowState(status: AuthFlowStatus.success, resetToken: token));
+      _safeEmit(
+        AuthFlowState(status: AuthFlowStatus.success, resetToken: token),
+      );
       return true;
     } catch (error) {
-      emit(
+      _safeEmit(
         AuthFlowState(status: AuthFlowStatus.failure, message: _message(error)),
       );
       return false;
@@ -63,29 +66,30 @@ class AuthFlowCubit extends Cubit<AuthFlowState> {
   Future<void> _loadDevCode(String phone, {required bool reset}) async {
     try {
       final value = await _repository.getDevOtp(phone);
-      emit(
+      _safeEmit(
         AuthFlowState(
           status: AuthFlowStatus.success,
           devCode: reset ? value.resetCode : value.code,
         ),
       );
     } on UnsupportedError {
-      emit(const AuthFlowState(status: AuthFlowStatus.success));
+      _safeEmit(const AuthFlowState(status: AuthFlowStatus.success));
     } catch (_) {
-      emit(const AuthFlowState(status: AuthFlowStatus.success));
+      _safeEmit(const AuthFlowState(status: AuthFlowStatus.success));
     }
   }
 
   Future<bool> _run(Future<void> Function() operation) async {
-    emit(const AuthFlowState(status: AuthFlowStatus.loading));
+    if (isClosed || state.status == AuthFlowStatus.loading) return false;
+    _safeEmit(const AuthFlowState(status: AuthFlowStatus.loading));
     try {
       await operation();
       if (state.status == AuthFlowStatus.loading) {
-        emit(const AuthFlowState(status: AuthFlowStatus.success));
+        _safeEmit(const AuthFlowState(status: AuthFlowStatus.success));
       }
       return true;
     } catch (error) {
-      emit(
+      _safeEmit(
         AuthFlowState(status: AuthFlowStatus.failure, message: _message(error)),
       );
       return false;
@@ -95,4 +99,7 @@ class AuthFlowCubit extends Cubit<AuthFlowState> {
   String _message(Object error) => error is AppException
       ? error.userMessage
       : error.toString().replaceFirst('Exception: ', '');
+  void _safeEmit(AuthFlowState value) {
+    if (!isClosed) super.emit(value);
+  }
 }

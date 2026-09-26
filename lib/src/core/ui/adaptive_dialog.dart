@@ -1,10 +1,38 @@
+import 'package:konush/l10n/source_messages.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 bool get _usesCupertino => defaultTargetPlatform == TargetPlatform.iOS;
 
+final _dialogOpen = Expando<bool>();
+
 Future<bool> showAdaptiveConfirmationDialog({
+  required BuildContext context,
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String cancelLabel = 'Отмена',
+  bool destructive = false,
+}) async {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  if (_dialogOpen[navigator] == true) return false;
+  _dialogOpen[navigator] = true;
+  try {
+    return await _showConfirmation(
+      context: context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      cancelLabel: cancelLabel,
+      destructive: destructive,
+    );
+  } finally {
+    _dialogOpen[navigator] = false;
+  }
+}
+
+Future<bool> _showConfirmation({
   required BuildContext context,
   required String title,
   required String message,
@@ -26,7 +54,7 @@ Future<bool> showAdaptiveConfirmationDialog({
             actions: [
               CupertinoDialogAction(
                 onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(cancelLabel),
+                child: Text(context.tr(cancelLabel)),
               ),
               CupertinoDialogAction(
                 isDestructiveAction: destructive,
@@ -48,7 +76,7 @@ Future<bool> showAdaptiveConfirmationDialog({
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext, false),
-              child: Text(cancelLabel),
+              child: Text(context.tr(cancelLabel)),
             ),
             FilledButton(
               style: destructive

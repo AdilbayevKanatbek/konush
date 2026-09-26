@@ -60,6 +60,7 @@ class ListingModel extends Listing {
     super.agencyName,
     super.rejectReason,
     super.contactPhone,
+    super.isPublic,
   });
 
   factory ListingModel.fromJson(Map<String, dynamic> json) {
@@ -107,6 +108,7 @@ class ListingModel extends Listing {
       contactsCount: json['contacts_count'] as int? ?? 0,
       rejectReason: json['reject_reason'] as String?,
       contactPhone: json['contact_phone'] as String?,
+      isPublic: json['is_public'] as bool?,
       createdAt: _date(json['created_at']),
       updatedAt: _date(json['updated_at']),
     );
@@ -134,6 +136,7 @@ ListingStatus _status(String? value) => switch (value) {
   'pending' => ListingStatus.pending,
   'sold' => ListingStatus.sold,
   'archived' => ListingStatus.archived,
+  'removed' => ListingStatus.archived,
   'rejected' => ListingStatus.rejected,
   _ => ListingStatus.active,
 };

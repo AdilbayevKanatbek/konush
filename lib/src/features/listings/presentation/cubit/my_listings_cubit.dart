@@ -14,12 +14,17 @@ class MyListingsLoading extends MyListingsState {
 }
 
 class MyListingsLoaded extends MyListingsState {
-  const MyListingsLoaded(this.items, this.total, {this.deletingId});
+  const MyListingsLoaded(
+    this.items,
+    this.total, {
+    this.deletingId,
+    this.message,
+  });
   final List<Listing> items;
   final int total;
-  final String? deletingId;
+  final String? deletingId, message;
   @override
-  List<Object?> get props => [items, total, deletingId];
+  List<Object?> get props => [items, total, deletingId, message];
 }
 
 class MyListingsFailure extends MyListingsState {
@@ -33,27 +38,65 @@ class MyListingsCubit extends Cubit<MyListingsState> {
   MyListingsCubit(this._repository) : super(const MyListingsLoading());
   final ListingsRepository _repository;
 
+  int _request = 0;
   Future<void> load() async {
-    emit(const MyListingsLoading());
+    if (isClosed ||
+        state is MyListingsLoaded &&
+            (state as MyListingsLoaded).deletingId != null) {
+      return;
+    }
+    final request = ++_request;
+    final previous = state;
+    if (previous is! MyListingsLoaded) emit(const MyListingsLoading());
     try {
-      final result = await _repository.getMyListings(perPage: 50);
-      emit(MyListingsLoaded(result.items, result.meta.total));
+      final items = <Listing>[];
+      var page = 1;
+      while (true) {
+        final result = await _repository.getMyListings(page: page, perPage: 50);
+        if (isClosed || request != _request) return;
+        items.addAll(result.items);
+        if (!result.meta.hasNext) {
+          emit(MyListingsLoaded(items, result.meta.total));
+          break;
+        }
+        page++;
+      }
     } catch (error) {
-      emit(MyListingsFailure(error.toString()));
+      if (isClosed || request != _request) return;
+      emit(
+        previous is MyListingsLoaded
+            ? MyListingsLoaded(
+                previous.items,
+                previous.total,
+                message: error.toString(),
+              )
+            : MyListingsFailure(error.toString()),
+      );
     }
   }
 
   Future<bool> delete(String id) async {
     final current = state;
-    if (current is! MyListingsLoaded) return false;
+    if (current is! MyListingsLoaded || current.deletingId != null) {
+      return false;
+    }
+    _request++;
     emit(MyListingsLoaded(current.items, current.total, deletingId: id));
     try {
       await _repository.deleteListing(id);
       final items = current.items.where((item) => item.id != id).toList();
-      emit(MyListingsLoaded(items, current.total - 1));
+      if (!isClosed) emit(MyListingsLoaded(items, current.total - 1));
       return true;
     } catch (error) {
-      emit(MyListingsFailure(error.toString()));
+      if (!isClosed) {
+        emit(
+          MyListingsLoaded(
+            current.items,
+            current.total,
+            message: error.toString(),
+          ),
+        );
+      }
       return false;
     }
   }

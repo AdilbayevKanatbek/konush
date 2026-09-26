@@ -5,6 +5,7 @@ import 'package:konush/src/features/listings/domain/listing_filter.dart';
 abstract interface class ListingsRepository {
   Future<PaginatedResult<Listing>> getListings(ListingFilter filter);
   Future<Listing> getById(String id);
+  Future<Listing> getMyById(String id);
   Future<PaginatedResult<Listing>> getFavorites({
     int page = 1,
     int perPage = 50,

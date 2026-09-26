@@ -79,6 +79,7 @@ class Listing extends Equatable {
     this.agencyName,
     this.rejectReason,
     this.contactPhone,
+    this.isPublic,
   });
 
   final String id;
@@ -118,10 +119,17 @@ class Listing extends Equatable {
   final int contactsCount;
   final String? rejectReason;
   final String? contactPhone;
+
+  /// Only supplied by the favorites API. Missing does not mean unavailable.
+  final bool? isPublic;
   final DateTime createdAt;
   final DateTime updatedAt;
 
   String get currency => 'KGS';
+  bool get canEdit =>
+      status == ListingStatus.active ||
+      status == ListingStatus.pending ||
+      status == ListingStatus.rejected;
   String? get photoUrl => photos.isEmpty ? null : photos.first.url;
   String get city => switch (cityId) {
     '00000000-0000-0000-0000-000000000001' => 'Бишкек',
@@ -173,6 +181,7 @@ class Listing extends Equatable {
     contactsCount,
     rejectReason,
     contactPhone,
+    isPublic,
     createdAt,
     updatedAt,
   ];

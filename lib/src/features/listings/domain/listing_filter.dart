@@ -54,6 +54,26 @@ class ListingFilter {
   final int page;
   final int perPage;
 
+  ListingFilter atPage(int value) => ListingFilter(
+    query: query,
+    dealType: dealType,
+    propertyType: propertyType,
+    cityId: cityId,
+    districtId: districtId,
+    priceMin: priceMin,
+    priceMax: priceMax,
+    rooms: rooms,
+    roomsMin: roomsMin,
+    roomsMax: roomsMax,
+    areaMin: areaMin,
+    areaMax: areaMax,
+    floorMin: floorMin,
+    floorMax: floorMax,
+    near: near,
+    sort: sort,
+    page: value,
+    perPage: perPage,
+  );
   Map<String, dynamic> toQuery() => {
     if (query?.trim().isNotEmpty == true) 'q': query!.trim(),
     if (dealType != null) 'deal_type': dealType!.wireName,
@@ -74,7 +94,7 @@ class ListingFilter {
       'lng': near!.longitude,
       'radius_km': near!.radiusKm,
     },
-    'sort_by': switch (sort) {
+    'sort': switch (sort) {
       ListingSort.priceAscending => 'price_asc',
       ListingSort.priceDescending => 'price_desc',
       ListingSort.newest => 'date_desc',

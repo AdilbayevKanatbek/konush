@@ -26,5 +26,8 @@ class TokenStorage {
     await _storage.write(key: _refreshKey, value: pair.refreshToken);
   }
 
-  Future<void> clear() => _storage.deleteAll();
+  Future<void> clear() async {
+    await _storage.delete(key: _accessKey);
+    await _storage.delete(key: _refreshKey);
+  }
 }

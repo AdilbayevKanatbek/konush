@@ -16,6 +16,9 @@ class ListingsRepositoryImpl implements ListingsRepository {
   Future<Listing> getById(String id) => _remote.getById(id);
 
   @override
+  Future<Listing> getMyById(String id) => _remote.getMyById(id);
+
+  @override
   Future<PaginatedResult<Listing>> getFavorites({
     int page = 1,
     int perPage = 50,

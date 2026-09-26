@@ -1,8 +1,9 @@
+import 'package:konush/l10n/source_messages.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:konush/src/core/di/injection.dart';
-import 'package:konush/src/core/ui/adaptive_dialog.dart';
+import 'package:flutter/services.dart';
 import 'package:konush/src/core/ui/kyrgyz_phone_formatter.dart';
 import 'package:konush/src/features/auth/domain/auth_params.dart';
 import 'package:konush/src/features/auth/presentation/cubit/auth_cubit.dart';
@@ -12,131 +13,10 @@ import 'package:konush/src/features/listings/presentation/pages/listings_page.da
 bool _validPhone(String value) =>
     RegExp(r'^\+996\d{9}$').hasMatch(value.replaceAll(RegExp(r'\s'), ''));
 
-String? _phoneError(String? value) => _validPhone(value ?? '')
+String? _phoneError(BuildContext context, String? value) =>
+    _validPhone(value ?? '')
     ? null
-    : 'Введите номер в формате +996 XXX XXX XXX';
-
-class RegisterPage extends StatefulWidget {
-  const RegisterPage({super.key});
-  @override
-  State<RegisterPage> createState() => _RegisterPageState();
-}
-
-class _RegisterPageState extends State<RegisterPage> {
-  final _key = GlobalKey<FormState>();
-  final _name = TextEditingController();
-  final _phone = TextEditingController(text: '+996');
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-  bool _obscure = true;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _phone.dispose();
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit(BuildContext context) async {
-    if (!(_key.currentState?.validate() ?? false)) return;
-    FocusManager.instance.primaryFocus?.unfocus();
-    final phone = _phone.text.replaceAll(RegExp(r'\s'), '');
-    final ok = await context.read<AuthFlowCubit>().register(
-      RegisterParams(
-        phone: phone,
-        name: _name.text.trim(),
-        email: _email.text.trim(),
-        password: _password.text,
-      ),
-    );
-    if (!context.mounted || !ok) return;
-    context.go('/verify-phone?phone=${Uri.encodeQueryComponent(phone)}');
-  }
-
-  @override
-  Widget build(BuildContext context) => _FlowProvider(
-    child: Builder(
-      builder: (context) => _AuthShell(
-        title: 'Создать аккаунт',
-        subtitle: 'Размещайте объявления и сохраняйте понравившиеся объекты.',
-        child: Form(
-          key: _key,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _name,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.name],
-                validator: (value) =>
-                    (value?.trim().length ?? 0) < 2 ? 'Укажите имя' : null,
-                decoration: const InputDecoration(labelText: 'Имя'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _phone,
-                inputFormatters: const [KyrgyzPhoneFormatter()],
-                keyboardType: TextInputType.phone,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.telephoneNumber],
-                validator: _phoneError,
-                decoration: const InputDecoration(labelText: 'Телефон'),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _email,
-                keyboardType: TextInputType.emailAddress,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.email],
-                validator: (value) {
-                  final email = value?.trim() ?? '';
-                  if (email.isNotEmpty && !email.contains('@')) {
-                    return 'Проверьте email';
-                  }
-                  return null;
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Email (необязательно)',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _password,
-                obscureText: _obscure,
-                textInputAction: TextInputAction.done,
-                autofillHints: const [AutofillHints.newPassword],
-                onFieldSubmitted: (_) => _submit(context),
-                validator: (value) =>
-                    (value?.length ?? 0) < 8 ? 'Минимум 8 символов' : null,
-                decoration: InputDecoration(
-                  labelText: 'Пароль',
-                  suffixIcon: IconButton(
-                    onPressed: () => setState(() => _obscure = !_obscure),
-                    icon: Icon(
-                      _obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              _SubmitButton(
-                label: 'Зарегистрироваться',
-                onPressed: () => _submit(context),
-              ),
-              TextButton(
-                onPressed: () => context.go('/login'),
-                child: const Text('Уже есть аккаунт? Войти'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
+    : context.tr('Введите номер в формате +996 XXX XXX XXX');
 
 enum CodePurpose { verifyPhone, resetPassword }
 
@@ -151,6 +31,7 @@ class CodePage extends StatefulWidget {
 class _CodePageState extends State<CodePage> {
   final _code = TextEditingController();
   bool _sent = false;
+  bool _initialSendScheduled = false;
 
   @override
   void dispose() {
@@ -171,9 +52,9 @@ class _CodePageState extends State<CodePage> {
   Future<void> _verify(BuildContext context) async {
     final value = _code.text.trim();
     if (value.length != 6) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Введите шестизначный код')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.tr("Введите шестизначный код"))),
+      );
       return;
     }
     final cubit = context.read<AuthFlowCubit>();
@@ -186,7 +67,8 @@ class _CodePageState extends State<CodePage> {
       final ok = await cubit.verifyResetCode(widget.phone, value);
       if (!context.mounted || !ok) return;
       final token = cubit.state.resetToken!;
-      context.go(
+      openPage(
+        context,
         '/new-password?phone=${Uri.encodeQueryComponent(widget.phone)}&token=${Uri.encodeQueryComponent(token)}',
       );
     }
@@ -196,30 +78,24 @@ class _CodePageState extends State<CodePage> {
   Widget build(BuildContext context) => _FlowProvider(
     child: Builder(
       builder: (context) {
-        if (!_sent) {
+        if (!_initialSendScheduled) {
+          _initialSendScheduled = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_sent) _send(context);
+            if (mounted) _send(context);
           });
         }
         return _AuthShell(
           title: widget.purpose == CodePurpose.verifyPhone
-              ? 'Подтвердите телефон'
-              : 'Код восстановления',
-          subtitle: 'Код отправлен на ${widget.phone}',
+              ? context.tr("Подтвердите телефон")
+              : context.tr("Код восстановления"),
+          subtitle: context.tr("Введите шестизначный код для номера\n{arg0}", {
+            'arg0': displayPhone(widget.phone),
+          }),
+          icon: Icons.sms_outlined,
           child: Column(
             children: [
-              TextField(
-                controller: _code,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                textInputAction: TextInputAction.done,
-                maxLength: 6,
-                onSubmitted: (_) => _verify(context),
-                decoration: const InputDecoration(
-                  labelText: 'Код из SMS',
-                  counterText: '',
-                ),
-              ),
+              _CodeInput(controller: _code, onSubmit: () => _verify(context)),
+              const SizedBox(height: 12),
               BlocBuilder<AuthFlowCubit, AuthFlowState>(
                 builder: (_, state) => state.devCode?.isNotEmpty == true
                     ? Padding(
@@ -232,22 +108,30 @@ class _CodePageState extends State<CodePage> {
                             );
                           },
                           icon: const Icon(Icons.developer_mode, size: 18),
-                          label: Text('Код staging: ${state.devCode}'),
+                          label: Text(
+                            context.tr("Код staging: {arg0}", {
+                              'arg0': state.devCode,
+                            }),
+                          ),
                         ),
                       )
                     : const SizedBox(height: 12),
               ),
               const SizedBox(height: 8),
               _SubmitButton(
-                label: 'Подтвердить',
+                label: context.tr("Подтвердить"),
                 onPressed: () => _verify(context),
               ),
-              TextButton(
-                onPressed: () {
-                  setState(() => _sent = false);
-                  _send(context);
-                },
-                child: const Text('Отправить код повторно'),
+              BlocBuilder<AuthFlowCubit, AuthFlowState>(
+                builder: (_, state) => TextButton(
+                  onPressed: state.status == AuthFlowStatus.loading
+                      ? null
+                      : () {
+                          setState(() => _sent = false);
+                          _send(context);
+                        },
+                  child: Text(context.tr("Отправить код повторно")),
+                ),
               ),
             ],
           ),
@@ -274,8 +158,8 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
   @override
   Widget build(BuildContext context) => _AuthShell(
-    title: 'Восстановить пароль',
-    subtitle: 'Введите телефон, привязанный к аккаунту.',
+    title: context.tr("Восстановить пароль"),
+    subtitle: context.tr("Введите телефон, привязанный к аккаунту."),
     child: Form(
       key: _key,
       child: Column(
@@ -286,9 +170,9 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             autofocus: true,
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.done,
-            validator: _phoneError,
+            validator: (value) => _phoneError(context, value),
             onFieldSubmitted: (_) => _next(),
-            decoration: const InputDecoration(labelText: 'Телефон'),
+            decoration: InputDecoration(labelText: context.tr("Телефон")),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -296,7 +180,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
             height: 48,
             child: FilledButton(
               onPressed: _next,
-              child: const Text('Получить код'),
+              child: Text(context.tr("Получить код")),
             ),
           ),
         ],
@@ -307,7 +191,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   void _next() {
     if (!(_key.currentState?.validate() ?? false)) return;
     final phone = _phone.text.replaceAll(RegExp(r'\s'), '');
-    context.go('/reset-code?phone=${Uri.encodeQueryComponent(phone)}');
+    openPage(context, '/reset-code?phone=${Uri.encodeQueryComponent(phone)}');
   }
 }
 
@@ -341,7 +225,9 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
     );
     if (!context.mounted || !ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Пароль изменён. Войдите с новым паролем.')),
+      SnackBar(
+        content: Text(context.tr("Пароль изменён. Войдите с новым паролем.")),
+      ),
     );
     context.go('/login');
   }
@@ -350,8 +236,10 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
   Widget build(BuildContext context) => _FlowProvider(
     child: Builder(
       builder: (context) => _AuthShell(
-        title: 'Новый пароль',
-        subtitle: 'Придумайте надёжный пароль минимум из 8 символов.',
+        title: context.tr("Новый пароль"),
+        subtitle: context.tr(
+          "Придумайте надёжный пароль минимум из 8 символов.",
+        ),
         child: Form(
           key: _key,
           child: Column(
@@ -360,9 +248,12 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                 controller: _password,
                 obscureText: true,
                 textInputAction: TextInputAction.next,
-                validator: (v) =>
-                    (v?.length ?? 0) < 8 ? 'Минимум 8 символов' : null,
-                decoration: const InputDecoration(labelText: 'Новый пароль'),
+                validator: (v) => (v?.length ?? 0) < 8
+                    ? context.tr("Минимум 8 символов")
+                    : null,
+                decoration: InputDecoration(
+                  labelText: context.tr("Новый пароль"),
+                ),
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -370,133 +261,21 @@ class _NewPasswordPageState extends State<NewPasswordPage> {
                 obscureText: true,
                 textInputAction: TextInputAction.done,
                 onFieldSubmitted: (_) => _submit(context),
-                validator: (v) =>
-                    v != _password.text ? 'Пароли не совпадают' : null,
-                decoration: const InputDecoration(
-                  labelText: 'Повторите пароль',
+                validator: (v) => v != _password.text
+                    ? context.tr("Пароли не совпадают")
+                    : null,
+                decoration: InputDecoration(
+                  labelText: context.tr("Повторите пароль"),
                 ),
               ),
               const SizedBox(height: 20),
               _SubmitButton(
-                label: 'Сохранить пароль',
+                label: context.tr("Сохранить пароль"),
                 onPressed: () => _submit(context),
               ),
             ],
           ),
         ),
-      ),
-    ),
-  );
-}
-
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: const CatalogHeader(),
-    body: SafeArea(
-      child: BlocBuilder<AuthCubit, AuthState>(
-        builder: (context, state) {
-          final user = state.user;
-          if (state.status == AuthStatus.unknown ||
-              state.status == AuthStatus.loading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (user == null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (context.mounted) context.go('/login');
-            });
-            return const Center(child: CircularProgressIndicator());
-          }
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  CircleAvatar(
-                    radius: 38,
-                    backgroundColor: tint,
-                    foregroundColor: teal,
-                    child: Text(
-                      user.name.isEmpty ? 'K' : user.name.characters.first,
-                      style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    user.name,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    user.phone,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: muted),
-                  ),
-                  const SizedBox(height: 24),
-                  ListTile(
-                    leading: Icon(
-                      user.isVerified
-                          ? Icons.verified
-                          : Icons.warning_amber_rounded,
-                      color: user.isVerified ? teal : Colors.orange,
-                    ),
-                    title: Text(
-                      user.isVerified
-                          ? 'Телефон подтверждён'
-                          : 'Телефон не подтверждён',
-                    ),
-                    trailing: user.isVerified
-                        ? null
-                        : TextButton(
-                            onPressed: () => context.go(
-                              '/verify-phone?phone=${Uri.encodeQueryComponent(user.phone)}',
-                            ),
-                            child: const Text('Подтвердить'),
-                          ),
-                  ),
-                  if (user.email != null)
-                    ListTile(
-                      leading: const Icon(Icons.email_outlined),
-                      title: Text(user.email!),
-                    ),
-                  ListTile(
-                    leading: const Icon(Icons.home_work_outlined),
-                    title: const Text('Мои объявления'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push('/my-listings'),
-                  ),
-                  const SizedBox(height: 16),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final confirmed = await showAdaptiveConfirmationDialog(
-                        context: context,
-                        title: 'Выйти из аккаунта?',
-                        message:
-                            'Вам понадобится снова войти, чтобы размещать объявления и управлять избранным.',
-                        confirmLabel: 'Выйти',
-                        destructive: true,
-                      );
-                      if (!confirmed || !context.mounted) return;
-                      await context.read<AuthCubit>().logout();
-                      if (context.mounted) context.go('/');
-                    },
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Выйти'),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     ),
   );
@@ -512,9 +291,7 @@ class _FlowProvider extends StatelessWidget {
       listener: (context, state) {
         if (state.status == AuthFlowStatus.failure) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(state.message ?? 'Не удалось выполнить запрос'),
-            ),
+            SnackBar(content: Text(context.errorText(state.message))),
           );
         }
       },
@@ -528,42 +305,129 @@ class _AuthShell extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.child,
+    this.icon = Icons.lock_outline_rounded,
   });
-  final String title;
-  final String subtitle;
+  final String title, subtitle;
   final Widget child;
+  final IconData icon;
   @override
   Widget build(BuildContext context) => Scaffold(
-    resizeToAvoidBottomInset: true,
-    appBar: AppBar(leading: const BackButton(), title: const Logo()),
-    body: SafeArea(
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 500),
-          child: ListView(
-            primary: false,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(20, 32, 20, 32),
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 30,
-                  height: 1.1,
-                  fontWeight: FontWeight.w900,
+    appBar: KonushAppBar(
+      title: context.tr("Аккаунт"),
+      back: true,
+      fallback: '/login',
+    ),
+    body: ContentWidth(
+      maxWidth: 480,
+      child: ListView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+        children: [
+          Center(
+            child: Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                color: tint,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Icon(icon, color: teal, size: 34),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: muted, fontSize: 14, height: 1.6),
+          ),
+          const SizedBox(height: 36),
+          child,
+        ],
+      ),
+    ),
+  );
+}
+
+class _CodeInput extends StatelessWidget {
+  const _CodeInput({required this.controller, required this.onSubmit});
+  final TextEditingController controller;
+  final VoidCallback onSubmit;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 64,
+    child: Stack(
+      children: [
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ExcludeSemantics(
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: controller,
+                builder: (_, value, _) => Row(
+                  children: [
+                    for (var i = 0; i < 6; i++)
+                      Expanded(
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: value.text.length == i ? tint : canvas,
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: value.text.length == i ? teal : border,
+                            ),
+                          ),
+                          child: Text(
+                            value.text.length > i ? value.text[i] : '',
+                            style: const TextStyle(
+                              color: ink,
+                              fontSize: 25,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Color(0xFF5A6967), height: 1.45),
-              ),
-              const SizedBox(height: 28),
-              child,
-            ],
+            ),
           ),
         ),
-      ),
+        Positioned.fill(
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.oneTimeCode],
+            maxLength: 6,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: const TextStyle(color: Colors.transparent, fontSize: 25),
+            cursorColor: Colors.transparent,
+            enableInteractiveSelection: false,
+            onSubmitted: (_) => onSubmit(),
+            decoration: InputDecoration(
+              labelText: context.tr("Шестизначный код"),
+              floatingLabelBehavior: FloatingLabelBehavior.never,
+              labelStyle: TextStyle(color: Colors.transparent),
+              filled: false,
+              counterText: '',
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

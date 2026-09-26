@@ -5,7 +5,9 @@ import 'package:konush/src/core/config/app_config.dart';
 import 'package:konush/src/core/storage/token_storage.dart';
 
 class AuthInterceptor extends Interceptor {
-  AuthInterceptor(this._dio, this._tokens);
+  AuthInterceptor(this._dio, this._tokens, {Dio? refreshClient})
+    : _refreshClient = refreshClient;
+  final Dio? _refreshClient;
 
   final Dio _dio;
   final TokenStorage _tokens;
@@ -30,13 +32,29 @@ class AuthInterceptor extends Interceptor {
       return handler.next(err);
     }
 
-    final pair = await (_refreshing ??= _refresh()).whenComplete(
-      () => _refreshing = null,
-    );
+    TokenPair? pair;
+    try {
+      pair = await (_refreshing ??= _refresh()).whenComplete(() {
+        _refreshing = null;
+      });
+    } on DioException catch (error) {
+      return handler.next(
+        DioException(
+          requestOptions: request,
+          type: error.type,
+          error: error.error,
+          response: error.response,
+          message: error.message,
+        ),
+      );
+    }
     if (pair == null) return handler.next(err);
 
     request.extra['retried'] = true;
     request.headers['Authorization'] = 'Bearer ${pair.accessToken}';
+    if (request.data is FormData) {
+      request.data = (request.data as FormData).clone();
+    }
     try {
       handler.resolve(await _dio.fetch<Object?>(request));
     } on DioException catch (retryError) {
@@ -48,7 +66,15 @@ class AuthInterceptor extends Interceptor {
     final refreshToken = await _tokens.refreshToken;
     if (refreshToken == null) return null;
     try {
-      final refreshDio = Dio(BaseOptions(baseUrl: AppConfig.apiBaseUrl));
+      final refreshDio =
+          _refreshClient ??
+          Dio(
+            BaseOptions(
+              baseUrl: AppConfig.apiBaseUrl,
+              connectTimeout: const Duration(seconds: 15),
+              receiveTimeout: const Duration(seconds: 20),
+            ),
+          );
       final response = await refreshDio.post<Map<String, dynamic>>(
         '/auth/refresh',
         data: {'refresh_token': refreshToken},
@@ -60,10 +86,20 @@ class AuthInterceptor extends Interceptor {
         refreshToken: data['refresh_token'] as String,
         expiresIn: data['expires_in'] as int? ?? 900,
       );
+      if (await _tokens.refreshToken != refreshToken) return null;
       await _tokens.save(pair);
       return pair;
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401 ||
+          error.response?.statusCode == 403) {
+        if (await _tokens.refreshToken == refreshToken) await _tokens.clear();
+      }
+      if (error.response?.statusCode != 401 &&
+          error.response?.statusCode != 403) {
+        rethrow;
+      }
+      return null;
     } catch (_) {
-      await _tokens.clear();
       return null;
     }
   }

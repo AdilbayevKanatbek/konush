@@ -1,12 +1,12 @@
+import 'dart:async';
+import 'package:konush/src/core/error/app_exception.dart';
+import 'package:konush/l10n/source_messages.dart';
+import 'package:konush/src/features/chat/presentation/chat_pages.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:go_router/go_router.dart';
 import 'package:konush/src/core/di/injection.dart';
 import 'package:konush/src/features/listings/domain/listing.dart';
 import 'package:konush/src/features/listings/domain/listings_repository.dart';
 import 'package:konush/src/features/listings/presentation/pages/listings_page.dart';
-import 'package:konush/src/features/listings/presentation/cubit/favorites_cubit.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ListingDetailPage extends StatefulWidget {
@@ -14,396 +14,403 @@ class ListingDetailPage extends StatefulWidget {
     super.key,
     required this.listingId,
     this.initialListing,
+    this.owned = false,
   });
   final String listingId;
   final Listing? initialListing;
-
+  final bool owned;
   @override
   State<ListingDetailPage> createState() => _ListingDetailPageState();
 }
 
 class _ListingDetailPageState extends State<ListingDetailPage> {
-  bool _menuOpen = false;
   late Future<Listing> _listing;
-
   @override
   void initState() {
     super.initState();
-    _listing = widget.initialListing != null
-        ? Future.value(widget.initialListing)
-        : sl<ListingsRepository>().getById(widget.listingId);
+    _listing = _load();
   }
 
-  void _retry() => setState(
-    () => _listing = sl<ListingsRepository>().getById(widget.listingId),
-  );
+  Future<Listing> _load() => widget.owned
+      ? sl<ListingsRepository>().getMyById(widget.listingId)
+      : sl<ListingsRepository>().getById(widget.listingId);
+
+  void _retry() => setState(() {
+    _listing = _load();
+  });
+  Future<void> _edit() async {
+    await openPage<void>(context, '/my-listings/${widget.listingId}/edit');
+    if (mounted) _retry();
+  }
 
   @override
   Widget build(BuildContext context) => FutureBuilder<Listing>(
     future: _listing,
-    builder: (context, snapshot) => PopScope(
-      canPop: !_menuOpen,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _menuOpen) setState(() => _menuOpen = false);
-      },
-      child: Scaffold(
-        appBar: CatalogHeader(
-          menuOpen: _menuOpen,
-          onMenu: () {
-            FocusManager.instance.primaryFocus?.unfocus();
-            setState(() => _menuOpen = !_menuOpen);
-          },
+    builder: (context, snapshot) {
+      final listing = snapshot.data;
+      return Scaffold(
+        backgroundColor: canvas,
+        appBar: KonushAppBar(
+          title: context.tr("Объявление"),
+          back: true,
+          fallback: widget.owned ? '/my-listings' : '/listings',
+          actions: [
+            if (listing != null && !widget.owned)
+              FavoriteButton(id: listing.id),
+          ],
         ),
         body: snapshot.connectionState != ConnectionState.done
             ? const Center(child: CircularProgressIndicator())
             : snapshot.hasError
-            ? _DetailFailure(onRetry: _retry)
-            : _body(snapshot.requireData),
-      ),
-    ),
-  );
-
-  Widget _body(Listing listing) => Column(
-    children: [
-      if (_menuOpen)
-        MobileHeaderMenu(onClose: () => setState(() => _menuOpen = false)),
-      Expanded(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1100),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final desktop = constraints.maxWidth >= 850;
-                    final content = [
-                      _Main(listing: listing),
-                      _Side(listing: listing),
-                    ];
-                    return desktop
-                        ? Row(
+            ? SingleChildScrollView(
+                child: AppEmptyState(
+                  icon: Icons.cloud_off_outlined,
+                  title: context.tr("Не удалось загрузить объявление"),
+                  message: context.tr(
+                    snapshot.error is AppException &&
+                            (snapshot.error as AppException).statusCode == 404
+                        ? 'Объявление больше недоступно'
+                        : 'Проверьте подключение и попробуйте ещё раз.',
+                  ),
+                  action: FilledButton(
+                    onPressed: _retry,
+                    child: Text(context.tr("Повторить")),
+                  ),
+                ),
+              )
+            : ContentWidth(
+                child: ListView(
+                  children: [
+                    _Gallery(listing: listing!),
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              if (widget.owned)
+                                ListingBadge(
+                                  context.tr(switch (listing.status) {
+                                    ListingStatus.pending => 'На проверке',
+                                    ListingStatus.rejected => 'Отклонено',
+                                    ListingStatus.active => 'Опубликовано',
+                                    ListingStatus.sold => 'Продано',
+                                    ListingStatus.archived => 'В архиве',
+                                    ListingStatus.draft => 'Черновик',
+                                  }),
+                                ),
+                              if (listing.isVip) const ListingBadge('VIP'),
+                              if (listing.isTop)
+                                ListingBadge(context.tr("Топ")),
+                              if (listing.id.startsWith('new-build-'))
+                                ListingBadge(context.tr("Новостройка · демо")),
+                              if (listing.isNegotiable)
+                                ListingBadge(
+                                  context.tr("Возможен торг"),
+                                  quiet: true,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            priceText(listing, context: context),
+                            style: const TextStyle(
+                              fontSize: 29,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.9,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            listing.title,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              height: 1.35,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(flex: 2, child: content[0]),
-                              const SizedBox(width: 24),
-                              Expanded(child: content[1]),
+                              const Icon(
+                                Icons.location_on_outlined,
+                                color: teal,
+                                size: 19,
+                              ),
+                              const SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  [
+                                    listing.address,
+                                    listing.city,
+                                  ].where((s) => s.isNotEmpty).join(', '),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: muted,
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
                             ],
-                          )
-                        : Column(children: content);
-                  },
+                          ),
+                          const SizedBox(height: 22),
+                          LayoutBuilder(
+                            builder: (context, constraints) => Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                for (final fact in [
+                                  (
+                                    context.tr("Комнаты"),
+                                    '${listing.rooms ?? '—'}',
+                                    Icons.meeting_room_outlined,
+                                  ),
+                                  (
+                                    context.tr("Площадь"),
+                                    context.tr("{arg0} м²", {
+                                      'arg0': listing.area.toStringAsFixed(0),
+                                    }),
+                                    Icons.square_foot_rounded,
+                                  ),
+                                  (
+                                    context.tr("Этаж"),
+                                    '${listing.floor ?? '—'}/${listing.totalFloors ?? '—'}',
+                                    Icons.layers_outlined,
+                                  ),
+                                  (
+                                    context.tr("Год постройки"),
+                                    '${listing.year ?? '—'}',
+                                    Icons.calendar_today_outlined,
+                                  ),
+                                ])
+                                  SizedBox(
+                                    width: (constraints.maxWidth - 8) / 2,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(13),
+                                      decoration: BoxDecoration(
+                                        color: canvas,
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Icon(fact.$3, color: muted, size: 19),
+                                          const SizedBox(height: 10),
+                                          Text(
+                                            fact.$2,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            fact.$1,
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr("Об объекте"),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            listing.description,
+                            style: const TextStyle(fontSize: 14, height: 1.65),
+                          ),
+                          const SizedBox(height: 18),
+                          Text(
+                            context.tr("Опубликовано {arg0}", {
+                              'arg0': listingDate(listing.createdAt),
+                            }),
+                            style: const TextStyle(color: muted, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      color: Colors.white,
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            context.tr("Продавец"),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: tint,
+                                foregroundColor: teal,
+                                child: Text(
+                                  listing.agentName.isEmpty
+                                      ? 'K'
+                                      : listing.agentName.characters.first,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      listing.agentName.isEmpty
+                                          ? context.tr("Продавец")
+                                          : listing.agentName,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      listing.agencyName ??
+                                          context.tr("Собственник"),
+                                      style: const TextStyle(
+                                        color: muted,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _DetailFailure extends StatelessWidget {
-  const _DetailFailure({required this.onRetry});
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => SafeArea(
-    child: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.cloud_off_outlined, size: 48, color: muted),
-            const SizedBox(height: 12),
-            const Text(
-              'Не удалось загрузить объявление',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(onPressed: onRetry, child: const Text('Повторить')),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-class _Main extends StatelessWidget {
-  const _Main({required this.listing});
-  final Listing listing;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      TextButton.icon(
-        onPressed: () => context.go('/listings'),
-        icon: const Icon(Icons.arrow_back, size: 17),
-        label: const Text('Назад к поиску'),
-      ),
-      const SizedBox(height: 10),
-      AspectRatio(
-        aspectRatio: 1.3,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: listing.photoUrl == null
-              ? const ColoredBox(
-                  color: Color(0xFFD3E0DC),
-                  child: Center(
-                    child: Text('фото', style: TextStyle(color: muted)),
-                  ),
-                )
-              : CachedNetworkImage(
-                  imageUrl: listing.photoUrl!,
-                  fit: BoxFit.cover,
-                  fadeInDuration: const Duration(milliseconds: 180),
-                  placeholder: (_, _) =>
-                      const ColoredBox(color: Color(0xFFD3E0DC)),
-                  errorWidget: (_, _, _) => const Center(
-                    child: Icon(Icons.image_not_supported_outlined),
+        bottomNavigationBar:
+            listing == null || (widget.owned && !listing.canEdit)
+            ? null
+            : widget.owned
+            ? SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                  child: ContentWidth(
+                    child: FilledButton.icon(
+                      onPressed: _edit,
+                      icon: const Icon(Icons.edit_outlined),
+                      label: Text(context.tr('Редактировать')),
+                    ),
                   ),
                 ),
-        ),
-      ),
-      const SizedBox(height: 22),
-      Text(
-        priceText(listing),
-        style: const TextStyle(
-          fontSize: 30,
-          fontWeight: FontWeight.w900,
-          color: ink,
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        '${listing.rooms ?? '—'}-комн. ${listing.propertyType == PropertyType.apartment ? 'квартира' : listing.propertyType.name}, ${listing.area.toStringAsFixed(0)} м²',
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-      ),
-      const SizedBox(height: 7),
-      Text(
-        '${listing.address}, ${listing.city}',
-        style: const TextStyle(color: muted),
-      ),
-      const SizedBox(height: 16),
-      BlocBuilder<FavoritesCubit, FavoritesState>(
-        buildWhen: (previous, current) =>
-            previous.ids.contains(listing.id) !=
-            current.ids.contains(listing.id),
-        builder: (context, state) {
-          final favorite = state.ids.contains(listing.id);
-          return OutlinedButton.icon(
-            onPressed: () => context.read<FavoritesCubit>().toggle(listing.id),
-            icon: Icon(
-              favorite ? Icons.favorite : Icons.favorite_border,
-              size: 18,
-            ),
-            label: Text(favorite ? 'Сохранено' : 'Сохранить'),
-          );
-        },
-      ),
-      const SizedBox(height: 20),
-      GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        childAspectRatio: 2.1,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 10,
-        children: [
-          _Fact('КОМНАТ', '${listing.rooms ?? '—'}'),
-          _Fact('ПЛОЩАДЬ', '${listing.area.toStringAsFixed(0)} м²'),
-          _Fact(
-            'ЭТАЖ',
-            '${listing.floor ?? '—'}/${listing.totalFloors ?? '—'} эт',
-          ),
-          _Fact('ПОСТРОЕН', '${listing.year ?? '—'}'),
-        ],
-      ),
-      const SizedBox(height: 25),
-      const Text(
-        'Об объекте',
-        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
-      ),
-      const SizedBox(height: 10),
-      Text(
-        listing.description,
-        style: const TextStyle(height: 1.55, color: Color(0xFF53615F)),
-      ),
-      const SizedBox(height: 28),
-      const Text(
-        'История цены, \$/м²',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-      ),
-      const Text('демо-данные', style: TextStyle(color: muted, fontSize: 12)),
-      const SizedBox(height: 20),
-      SizedBox(
-        height: 130,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            for (var i = 0; i < 7; i++)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Container(
-                    height: 55.0 + i * 9,
-                    decoration: BoxDecoration(
-                      color: i == 6 ? teal : const Color(0xFFE8ECE9),
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(5),
+              )
+            : DecoratedBox(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: border)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    child: ContentWidth(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _ContactButton(listing: listing),
+                          const SizedBox(height: 8),
+                          ListingChatButton(listing: listing),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
-          ],
-        ),
-      ),
-    ],
+      );
+    },
   );
 }
 
-class _Fact extends StatelessWidget {
-  const _Fact(this.label, this.value);
-  final String label, value;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(13),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      border: Border.all(color: border),
-      borderRadius: BorderRadius.circular(13),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: muted,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const Spacer(),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w900)),
-      ],
-    ),
-  );
-}
-
-class _Side extends StatelessWidget {
-  const _Side({required this.listing});
+class _Gallery extends StatefulWidget {
+  const _Gallery({required this.listing});
   final Listing listing;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 45),
-    child: Column(
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: border),
-            borderRadius: BorderRadius.circular(15),
-          ),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: tint,
-                    foregroundColor: teal,
-                    child: Text(
-                      listing.agentName.isEmpty
-                          ? 'K'
-                          : listing.agentName.characters.first,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          listing.agentName.isEmpty
-                              ? 'Продавец'
-                              : listing.agentName,
-                          style: const TextStyle(fontWeight: FontWeight.w900),
-                        ),
-                        Text(
-                          listing.agencyName ?? 'Собственник',
-                          style: const TextStyle(color: muted, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: _ContactButton(listing: listing),
-              ),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: null,
-                  icon: const Icon(Icons.chat_bubble_outline, size: 17),
-                  label: const Text('Чат скоро появится'),
+  State<_Gallery> createState() => _GalleryState();
+}
+
+class _GalleryState extends State<_Gallery> {
+  int _page = 0;
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.listing.photos;
+    return AspectRatio(
+      aspectRatio: 1.35,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (photos.isEmpty)
+            const ListingImage()
+          else
+            PageView.builder(
+              onPageChanged: (value) => setState(() => _page = value),
+              itemCount: photos.length,
+              itemBuilder: (_, i) => ListingImage(url: photos[i].url),
+            ),
+          if (photos.isNotEmpty)
+            Positioned(
+              right: 16,
+              bottom: 14,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0x9912211F),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  '${_page + 1} / ${photos.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: ink,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Ипотечный калькулятор',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              SizedBox(height: 18),
-              _LoanRow('Первый взнос', '30%'),
-              Slider(value: .3, onChanged: null),
-              _LoanRow('Срок', '15 лет'),
-              Slider(value: .55, onChanged: null),
-              _LoanRow('Ставка', '14%'),
-              Slider(value: .45, onChanged: null),
-              Divider(color: Color(0xFF29413D)),
-              Text(
-                'Платёж в месяц',
-                style: TextStyle(color: muted, fontSize: 12),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '\$1,958',
-                style: TextStyle(
-                  color: Color(0xFF4CC2B2),
-                  fontSize: 25,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ContactButton extends StatefulWidget {
@@ -415,21 +422,31 @@ class _ContactButton extends StatefulWidget {
 
 class _ContactButtonState extends State<_ContactButton> {
   bool _recorded = false;
+  bool _showing = false;
 
   Future<void> _showContact() async {
+    if (_showing) return;
+    _showing = true;
     if (!_recorded) {
       _recorded = true;
       try {
-        await sl<ListingsRepository>().recordContact(widget.listing.id);
+        unawaited(
+          sl<ListingsRepository>()
+              .recordContact(widget.listing.id)
+              .catchError((_) {}),
+        );
       } catch (_) {}
     }
-    if (!mounted) return;
+    if (!mounted) {
+      _showing = false;
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       builder: (context) => _ContactSheet(listing: widget.listing),
-    );
+    ).whenComplete(() => _showing = false);
   }
 
   @override
@@ -437,8 +454,8 @@ class _ContactButtonState extends State<_ContactButton> {
     onPressed: _showContact,
     child: Text(
       widget.listing.seller == 'owner'
-          ? 'Связаться с продавцом'
-          : 'Связаться с агентом',
+          ? context.tr("Связаться с продавцом")
+          : context.tr("Связаться с агентом"),
     ),
   );
 }
@@ -470,7 +487,9 @@ class _ContactSheet extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                listing.agentName.isEmpty ? 'Продавец' : listing.agentName,
+                listing.agentName.isEmpty
+                    ? context.tr("Продавец")
+                    : listing.agentName,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w900,
@@ -484,7 +503,11 @@ class _ContactSheet extends StatelessWidget {
           ],
         ),
         Text(
-          'По объявлению: ${listing.rooms ?? '—'}-комн., ${listing.area.toStringAsFixed(0)} м² · ${priceText(listing)}',
+          context.tr("По объявлению: {arg0}-комн., {arg1} м² · {arg2}", {
+            'arg0': listing.rooms ?? '—',
+            'arg1': listing.area.toStringAsFixed(0),
+            'arg2': priceText(listing, context: context),
+          }),
           style: const TextStyle(color: muted, fontSize: 12.5),
         ),
         const SizedBox(height: 22),
@@ -503,25 +526,27 @@ class _ContactSheet extends StatelessWidget {
                 final uri = Uri(scheme: 'tel', path: listing.contactPhone);
                 if (!await launchUrl(uri) && context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Не удалось открыть приложение телефона'),
+                    SnackBar(
+                      content: Text(
+                        context.tr("Не удалось открыть приложение телефона"),
+                      ),
                     ),
                   );
                 }
               },
               icon: const Icon(Icons.phone, size: 19),
-              label: const Text('Позвонить'),
+              label: Text(context.tr("Позвонить")),
             ),
           ),
           const SizedBox(height: 10),
-          const Center(
+          Center(
             child: Text(
-              'Скажите, что нашли объявление на Konush',
+              context.tr("Скажите, что нашли объявление на Konush"),
               style: TextStyle(color: muted, fontSize: 11.5),
             ),
           ),
         ] else
-          const DecoratedBox(
+          DecoratedBox(
             decoration: BoxDecoration(
               color: Color(0xFFF1F3F0),
               borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -530,7 +555,7 @@ class _ContactSheet extends StatelessWidget {
               padding: EdgeInsets.all(14),
               child: Center(
                 child: Text(
-                  'Продавец не указал номер телефона',
+                  context.tr("Продавец не указал номер телефона"),
                   style: TextStyle(color: muted),
                 ),
               ),
@@ -538,26 +563,5 @@ class _ContactSheet extends StatelessWidget {
           ),
       ],
     ),
-  );
-}
-
-class _LoanRow extends StatelessWidget {
-  const _LoanRow(this.label, this.value);
-  final String label, value;
-  @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: Text(label, style: const TextStyle(color: muted, fontSize: 12)),
-      ),
-      Text(
-        value,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 12,
-        ),
-      ),
-    ],
   );
 }

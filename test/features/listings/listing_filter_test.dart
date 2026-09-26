@@ -19,9 +19,9 @@ void main() {
     expect(filter.toQuery(), containsPair('q', 'Джал'));
     expect(filter.toQuery(), containsPair('deal_type', 'sale'));
     expect(filter.toQuery(), containsPair('property_type', 'apartment'));
-    expect(filter.toQuery(), containsPair('sort_by', 'price_asc'));
+    expect(filter.toQuery(), containsPair('sort', 'price_asc'));
     expect(filter.toQuery(), containsPair('radius_km', 5));
     expect(filter.toQuery(), containsPair('per_page', 50));
-    expect(filter.toQuery(), isNot(contains('sort')));
+    expect(filter.toQuery(), isNot(contains('sort_by')));
   });
 }

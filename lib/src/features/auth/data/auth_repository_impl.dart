@@ -58,6 +58,8 @@ class AuthRepositoryImpl implements AuthRepository {
     final refresh = await _tokens.refreshToken;
     try {
       if (refresh != null) await _remote.logout(refresh);
+    } catch (_) {
+      // The local session still ends when the logout endpoint is offline.
     } finally {
       await _tokens.clear();
     }

@@ -31,6 +31,14 @@ class ListingsRemoteDataSource {
     return response.data;
   }
 
+  Future<ListingModel> getMyById(String id) async {
+    final response = await _client.get(
+      '/listings/my/$id',
+      decode: (value) => ListingModel.fromJson(value! as Map<String, dynamic>),
+    );
+    return response.data;
+  }
+
   Future<PaginatedResult<ListingModel>> getFavorites({
     int page = 1,
     int perPage = 50,

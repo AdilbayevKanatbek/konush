@@ -1,4 +1,10 @@
 import 'package:dio/dio.dart';
+import 'dart:convert';
+import 'package:konush/src/features/chat/domain/chat_models.dart';
+import 'package:konush/src/features/chat/domain/chat_repository.dart';
+import 'package:konush/src/features/chat/data/chat_repository_impl.dart';
+import 'package:konush/src/features/chat/data/chat_socket.dart';
+import 'package:konush/src/features/chat/presentation/chat_cubit.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get_it/get_it.dart';
 import 'package:konush/src/core/config/app_config.dart';
@@ -50,4 +56,38 @@ Future<void> configureDependencies() async {
   sl.registerFactory(() => ListingsCubit(sl()));
   sl.registerFactory(() => FavoritesCubit(sl(), sl(), sl()));
   sl.registerFactory(() => MyListingsCubit(sl()));
+  sl.registerLazySingleton<ChatRepository>(() => ChatRepositoryImpl(sl()));
+  sl.registerFactory<ChatRealtime>(
+    () => ChatSocket(
+      url: Uri.parse(AppConfig.webSocketUrl),
+      tokenProvider: (refresh) async {
+        var token = await sl<TokenStorage>().accessToken;
+        if (token == null) return null;
+        bool expiresSoon = false;
+        try {
+          final payload =
+              jsonDecode(
+                    utf8.decode(
+                      base64Url.decode(
+                        base64Url.normalize(token.split('.')[1]),
+                      ),
+                    ),
+                  )
+                  as Map<String, dynamic>;
+          final exp = payload['exp'] as num?;
+          expiresSoon =
+              exp != null &&
+              exp * 1000 < DateTime.now().millisecondsSinceEpoch + 30000;
+        } catch (_) {
+          expiresSoon = true;
+        }
+        if (refresh || expiresSoon) {
+          await sl<AuthRepository>().getProfile();
+          token = await sl<TokenStorage>().accessToken;
+        }
+        return token;
+      },
+    ),
+  );
+  sl.registerFactory(() => ChatCubit(sl(), sl()));
 }
